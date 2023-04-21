@@ -1,5 +1,6 @@
 import random
 
+
 class BankDataBase:
     stored_credentials = {}
 
@@ -34,10 +35,10 @@ class AccountGenerator:
     @staticmethod
     def generate_card_number() -> str:
         card_number = "400000"
-        check_digit = random.randint(0, 9)
         for i in range(9):
             card_number += str(random.randint(0, 9))
-        card_number += str(check_digit)
+        check_sum = AccountGenerator.luhn_algorithm(card_number)
+        card_number = card_number + check_sum
         return card_number
 
     @staticmethod
@@ -47,6 +48,20 @@ class AccountGenerator:
             pin += str(random.randint(0, 9))
         return pin
 
+    @staticmethod
+    def luhn_algorithm(card_number: str):
+        card_number = list(card_number)
+        for i in range(0, len(card_number), 2):
+            card_number[i] = str(int(card_number[i]) * 2)
+        for i in range(len(card_number)):
+            if int(card_number[i]) > 9:
+                card_number[i] = str(int(card_number[i]) - 9)
+        card_number = [int(i) for i in card_number]
+        sum_of_digits = sum(card_number)
+        if sum_of_digits % 10 == 0:
+            return "0"
+        else:
+            return str(10 - (sum_of_digits % 10))
 
 class Account:
     def __init__(self, card_number, pin):
@@ -75,7 +90,6 @@ def logged_in_interface():
 
 def main():
     database = BankDataBase()
-
     while True:
         main_interface()
         user_input = input()
