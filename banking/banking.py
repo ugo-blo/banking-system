@@ -1,26 +1,29 @@
 import random
+import sqlite3
 
 
 class BankDataBase:
-    stored_credentials = {}
 
     def __init__(self):
-        pass
+        self.conn = sqlite3.connect('card.s3db')
+        self.cur = self.conn.cursor()
+        self.cur.execute('create table if not exists card (id integer primary key autoincrement, number text, pin text, balance integer default 0)')
 
-    def credential_exists(self, card_number):
-        if card_number in self.stored_credentials:
-            return True
-        else:
-            return False
+    def credential_exists(self, card_number) -> bool:
+        self.cur.execute(f'select number from card where number = {card_number}')
+        return self.cur.fetchone() is not None
 
     def add_account(self, card_number, pin):
-        self.stored_credentials[card_number] = pin
+        self.cur.execute(f'insert into card (number, pin) values ({card_number}, {pin})')
+        self.conn.commit()
 
-    def check_credentials(self, card_number, pin):
-        if card_number in self.stored_credentials and self.stored_credentials[card_number] == pin:
-            return True
-        else:
-            return False
+    def check_credentials(self, card_number, pin) -> bool:
+        self.cur.execute(f'select number, pin from card where number = {card_number} and pin = {pin}')
+        return self.cur.fetchone() is not None
+
+    def get_balance(self, card_number):
+        self.cur.execute(f'select balance from card where number = {card_number}')
+        return self.cur.fetchone()[0]
 
 
 class AccountGenerator:
@@ -63,11 +66,16 @@ class AccountGenerator:
         else:
             return str(10 - (sum_of_digits % 10))
 
+
 class Account:
-    def __init__(self, card_number, pin):
+    def __init__(self, card_number, pin, database: BankDataBase):
+        self.database = database
         self.card_number = card_number
         self.pin = pin
         self.balance = 0
+
+    def get_balance(self):
+        return self.database.get_balance(self.card_number)
 
     def add_income(self, income):
         self.balance += income
@@ -95,7 +103,7 @@ def main():
         user_input = input()
         if user_input == "1":
             account_generation = AccountGenerator(database)
-            account = Account(account_generation.card_number, account_generation.pin)
+            account = Account(account_generation.card_number, account_generation.pin, database)
             database.add_account(account.card_number, account.pin)
             print("Your card has been created")
             print("Your card number:")
@@ -108,12 +116,13 @@ def main():
             print("Enter your PIN:")
             pin = input()
             if database.check_credentials(card_number, pin):
+                account = Account(card_number, pin, database)
                 print("You have successfully logged in!")
                 while True:
                     logged_in_interface()
                     user_input = input()
                     if user_input == "1":
-                        print("Balance: " + str(account.balance))
+                        print("Balance: " + str(account.get_balance()))
                     elif user_input == "2":
                         print("You have successfully logged out!")
                         break
@@ -127,5 +136,6 @@ def main():
             print("Bye!")
             exit()
         print()
+
 
 main()
