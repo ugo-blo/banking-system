@@ -8,6 +8,7 @@ class BankDataBase:
         self.conn = sqlite3.connect('card.s3db')
         self.cur = self.conn.cursor()
         self.cur.execute('create table if not exists card (id integer primary key autoincrement, number text, pin text, balance integer default 0)')
+        self.conn.commit()
 
     def credential_exists(self, card_number) -> bool:
         self.cur.execute(f'select number from card where number = {card_number}')
@@ -24,6 +25,14 @@ class BankDataBase:
     def get_balance(self, card_number):
         self.cur.execute(f'select balance from card where number = {card_number}')
         return self.cur.fetchone()[0]
+
+    def update_income(self, card_number, income):
+        self.cur.execute(f'update card set balance = balance + {income} where number = {card_number}')
+        self.conn.commit()
+
+    def close_account(self, card_number):
+        self.cur.execute(f'delete from card where number = {card_number}')
+        self.conn.commit()
 
 
 class AccountGenerator:
@@ -66,8 +75,25 @@ class AccountGenerator:
         else:
             return str(10 - (sum_of_digits % 10))
 
+    @staticmethod
+    def check_for_luhn(card_number):
+        digits = [int(i) for i in str(card_number)][::-1]
+        doubled_digits = []
+        for i in range(len(digits)):
+            if i % 2 == 1:
+                doubled_digits.append(digits[i] * 2)
+            else:
+                doubled_digits.append(digits[i])
+        subtracted_digits = [x - 9 if x > 9 else x for x in doubled_digits]
+        sum_of_digits = sum(subtracted_digits)
+        if sum_of_digits % 10 == 0:
+            return True
+        else:
+            return False
+
 
 class Account:
+
     def __init__(self, card_number, pin, database: BankDataBase):
         self.database = database
         self.card_number = card_number
@@ -77,11 +103,42 @@ class Account:
     def get_balance(self):
         return self.database.get_balance(self.card_number)
 
-    def add_income(self, income):
-        self.balance += income
+    def add_income(self, income: int):
+        if income < 0:
+            return
+        self.database.update_income(self.card_number, income)
+        print("Income was added!")
+
+    def pull_income(self, income: int):
+        if income > 0:
+            return
+        self.database.update_income(self.card_number, income)
+
+    def push_income(self, income: int, card_number_transaction):
+        if income < 0:
+            return
+        self.database.update_income(card_number_transaction, income)
+
+    def make_transaction(self, card_number_transaction):
+        if card_number_transaction == self.card_number:
+            print("You can't transfer money to the same account!")
+        elif not AccountGenerator.check_for_luhn(card_number_transaction):
+            print("Probably you made a mistake in the card number. Please try again!")
+        elif not self.database.credential_exists(card_number_transaction):
+            print("Such a card does not exist.")
+        else:
+            print("Enter how much money you want to transfer")
+            transfer_amount = int(input())
+            if transfer_amount > self.get_balance():
+                print("Not enough money!")
+            else:
+                self.pull_income(-transfer_amount)
+                self.push_income(transfer_amount, card_number_transaction)
+                print("Success!")
 
     def close_account(self):
-        pass
+        self.database.close_account(self.card_number)
+        print("The account has been closed!")
 
 
 def main_interface():
@@ -92,7 +149,10 @@ def main_interface():
 
 def logged_in_interface():
     print("1. Balance")
-    print("2. Log out")
+    print("2. Add income")
+    print("3. Do transfer")
+    print("4. Close account")
+    print("5. Log out")
     print("0. Exit")
 
 
@@ -124,6 +184,18 @@ def main():
                     if user_input == "1":
                         print("Balance: " + str(account.get_balance()))
                     elif user_input == "2":
+                        print("Enter income:")
+                        income_to_add = int(input())
+                        account.add_income(income_to_add)
+                    elif user_input == "3":
+                        print("Transfer")
+                        print("Enter card number:")
+                        card_number = input()
+                        account.make_transaction(card_number)
+                    elif user_input == "4":
+                        account.close_account()
+                        break
+                    elif user_input == "5":
                         print("You have successfully logged out!")
                         break
                     elif user_input == "0":
@@ -138,4 +210,5 @@ def main():
         print()
 
 
-main()
+if __name__ ==  '__main__':
+    main()
